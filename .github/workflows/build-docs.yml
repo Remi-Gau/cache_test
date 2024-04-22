@@ -73,7 +73,7 @@ jobs:
 
         -   name: Get data
             run: |
-                mkdir -p data
+                mkdir -p data/reports
 
                 echo "Download data required for building reports in doc"
                 touch data/reports/data.tsv
