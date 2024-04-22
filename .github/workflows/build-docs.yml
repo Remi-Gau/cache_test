@@ -1,0 +1,111 @@
+---
+# Workflow to build the documentation.
+#
+#  On pull requests, partial builds are run except
+#  if "[full doc]" is defined in commit message.
+#  Full builds are always run on "main".
+#  This is done every time there is a push on "main" and every week.
+#
+#  Data is cached after the get_data job to be passed to the build_docs job.
+#  Data can be cached and restore across attempts of a run of this workflow.
+#  Data can be cached and restored across run of this workflow.
+#  Using "[force download]" in the commit message should prevent from using any cache.
+name: DocumentationBuilder
+
+on:
+    push:
+        branches:
+        -   main
+    pull_request:
+        branches:
+        -   '*'
+    schedule:
+    -   cron: 0 6 * * *
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    # Force to use color
+    FORCE_COLOR: true
+    BROWSER: /usr/bin/firefox
+    DISPLAY: :99.0
+
+jobs:
+
+    get_data:
+        runs-on: ubuntu-latest
+        timeout-minutes: 360
+        defaults:
+            run:
+                shell: bash -el {0}
+
+        steps:
+        -   name: Checkout nilearn
+            uses: actions/checkout@v4
+
+        -   name: Key for cache based on month number
+            run: date +%m > month_num;
+
+        -   name: Get cache from a previous attempts on this PR or branch
+            id: restore-previous-run
+            uses: actions/cache/restore@v4
+            with:
+                path: data
+                key: data_cache-${{ github.workflow }}_ref-${{ github.ref }}
+
+        -   name: Get data for reports from a previous successful run
+            # only run it if we did not get the data from a previous attempt
+            if: ${{ steps.restore-previous-run.outputs.cache-hit != 'true' }}
+            uses: actions/cache@v4
+            with:
+                path: data/reports
+                key: data_cache-${{ github.workflow }}_month-${{ hashFiles('month_num') }}
+
+        -   name: Get data from a previous successful run for full builds
+            # only run it if we did not get the data from a previous attempt
+            if: ${{ steps.restore-previous-run.outputs.cache-hit != 'true' }}
+            uses: actions/cache@v4
+            with:
+                path: data
+                key: data_cache-${{ github.workflow }}_month-${{ hashFiles('month_num') }}
+
+        -   name: Get data
+            run: |
+                mkdir -p data
+
+                echo "Download data required for building reports in doc"
+                touch data/reports/data.tsv
+
+                echo "Download data required for this doc build type"
+                touch data/data.tsv
+
+        -   name: Save cache to pass to build_docs job
+            uses: actions/cache/save@v4
+            if: always()
+            with:
+                path: data
+                key: data_cache-${{ github.workflow }}_ref-${{ github.ref }}
+
+    # Steps to build the documentation.
+    build_docs:
+        needs: [get_data]
+        # This prevents this workflow from running on a fork.
+        # To test this workflow on a fork, uncomment the following line.
+        if: github.repository == 'nilearn/nilearn'
+        runs-on: ubuntu-latest
+        timeout-minutes: 360
+        defaults:
+            run:
+                shell: bash -el {0}
+
+        steps:
+        -   name: Key for cache based on month number
+            run: date +%m > month_num;
+
+        -   name: Get data from the get_data job
+            uses: actions/cache@v4
+            with:
+                path: data
+                key: data_cache-${{ github.workflow }}_ref-${{ github.ref }}
