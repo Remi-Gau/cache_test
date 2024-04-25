@@ -1,0 +1,18 @@
+---
+# Workflow to trigger the job that will host the documentation
+name: Documentation push trigger
+on:
+    workflow_run:
+        workflows: [DocumentationBuilder]
+        types: [completed]
+
+jobs:
+    push:
+        runs-on: ubuntu-latest
+        steps:
+        -   name: Display
+            run: echo "triggering hosting of doc on Circle-CI"
+
+        -   name: Checkout
+            uses: actions/checkout@v4
+
